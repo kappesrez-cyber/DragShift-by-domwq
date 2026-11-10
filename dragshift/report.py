@@ -55,6 +55,19 @@ def size_change(before: int, after: int) -> tuple[str, str]:
     return text, "same size"
 
 
+def _cleared(path: Path) -> str:
+    """'62% transparent' for a cut-out PNG."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            if "A" not in im.getbands():
+                return ""
+            hist = im.getchannel("A").histogram()
+        return f"{sum(hist[:128]) / max(1, sum(hist)) * 100:.0f}% transparent"
+    except Exception:
+        return ""
+
+
 def _dim_str(d) -> str:
     return f"{d[0]}×{d[1]}" if d else ""
 
@@ -112,6 +125,12 @@ def summarize(action: str, srcs: list, outs: list, extra: str = "") -> Result:
 
     if name == "Add BG":
         return Result("Background added", f"{_dim_str(dims(o0))} PNG · {human_size(after)} · {o0.name}", outs, srcs)
+
+    if name == "Remove BG":
+        detail = f"{_dim_str(dims(o0))} PNG · {human_size(after)}"
+        if extra:
+            detail += f" · {extra}"
+        return Result("Background removed", f"{detail} · {o0.name}", outs, srcs, good=_cleared(o0))
 
     if name == "Annotate":
         return Result("Annotated", f"{extra} · {o0.name}" if extra else o0.name, outs, srcs)

@@ -62,12 +62,35 @@ You can also right-click a file → **DragShift…**, use **Send to → DragShif
 
 | File | Convert to | Tools |
 |---|---|---|
-| Images (JPG, PNG, WEBP, HEIC, AVIF, TIFF, BMP, GIF, ICO) | Any of those, or PDF. Several images become one combined PDF | **Compress** (by quality or to a target size such as "under 500 KB", with a before/after preview, several files at once) · **Resize** · **Crop** (ratios, live pixel size, rotate) · **Edit** (Auto, light/colour, rotate, flip, B&W, hold to compare) · **Annotate** (arrows, boxes, numbered steps, text, marker) · **Redact** · **Add BG** · **Metadata** (camera, date, GPS location with a map link; remove location only or remove everything) |
+| Images (JPG, PNG, WEBP, HEIC, AVIF, TIFF, BMP, GIF, ICO) | Any of those, or PDF. Several images become one combined PDF | **Compress** (by quality or to a target size such as "under 500 KB", with a before/after preview, several files at once) · **Resize** · **Crop** (ratios, live pixel size, rotate) · **Edit** (Auto, light/colour, rotate, flip, B&W, hold to compare) · **Annotate** (arrows, boxes, numbered steps, text, marker) · **Redact** · **Remove BG** (transparent cut-out, see below) · **Add BG** · **Metadata** (camera, date, GPS location with a map link; remove location only or remove everything) |
 | PDF | JPG or PNG (one per page), DOCX, TXT | Compress · Split · Rotate · Merge (drop several) · **Protect** (AES-256 password) · **Extract images** · Metadata |
 | Word (.docx) | PDF (uses Microsoft Word if it's installed, otherwise a built-in renderer), TXT | — |
 | Text (.txt, .md, .csv…) | PDF, DOCX | — |
 
 **Settings** (tray menu): trigger key (Shift, Ctrl or Alt), where results go (next to the original or a `DragShift` subfolder), JPG/WebP quality, PDF → image resolution, and start at login.
+
+## Remove a background
+
+**Remove BG** cuts the subject out of a photo and saves it as a PNG with a transparent background.
+
+1. Drag an image, press **Shift**, tap **Shift** again to switch to **Tools**, and drop it on **Remove BG**.
+2. The background is found automatically and the preview shows the result on a checkerboard. Switch the preview to **White** or **Dark** to check the edges, or press and hold **Hold to compare** to see the original.
+3. Fix anything it missed:
+   - **Pick background**: click a spot that should be gone. Its colour is added to the background, and the area around the click is removed even if it's enclosed by the subject.
+   - **Erase**: paint over anything that should go.
+   - **Keep**: paint over anything that was removed by mistake. It brings back the original pixels.
+   - **Undo** (Ctrl+Z / ⌘Z) takes back the last click or stroke. **Brush size** sets the brush.
+4. Adjust if needed:
+   - **Tolerance**: higher removes colours further from the background. Lower it if parts of the subject disappear.
+   - **Edge softness**: higher gives smoother, softer edges.
+   - **Remove enclosed areas**: also clears background-coloured gaps inside the subject, such as a cup handle or the inside of an "O".
+   - **Clean up specks**: drops small leftover islands (on by default).
+   - **Trim to subject**: crops the saved PNG to the subject.
+5. Click **Remove Background** (or press Enter). The result is saved next to the original as *"name No Background.png"*. **Copy** puts it on the clipboard instead.
+
+To put the cut-out on a new backdrop, drop the PNG on **Add BG** afterwards.
+
+**What works best:** a subject on a plain or smoothly shaded background, such as product shots, logos, signatures, screenshots, or a portrait against a wall. Hair and soft edges are refined against the background colour. Busy backgrounds (a street, a forest, a crowd) need more help from the brushes, because the tool works on colour, not on a trained model. Everything runs on your computer: nothing is uploaded.
 
 ## The look
 

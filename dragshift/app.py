@@ -30,13 +30,14 @@ from .handoff import ipc_name
 IPC_NAME = ipc_name()
 
 GLYPHS = {"Compress": "⇲", "Metadata": "ⓘ", "Redact": "▮", "Crop": "⌗", "Edit": "☼",
-          "Annotate": "✎", "Add BG": "▣", "Resize": "⤢", "Split": "✂", "Rotate": "⟳",
-          "Merge": "⧉", "Protect": "⚿", "Extract": "⧈"}
+          "Annotate": "✎", "Remove BG": "◪", "Add BG": "▣", "Resize": "⤢", "Split": "✂",
+          "Rotate": "⟳", "Merge": "⧉", "Protect": "⚿", "Extract": "⧈"}
 
 HINTS = {
     "Compress": "Shrink file size", "Metadata": "View · remove GPS", "Redact": "Hide private info",
     "Crop": "Trim to a ratio", "Edit": "Light · colour · rotate", "Annotate": "Arrows · text · steps",
-    "Add BG": "Gradient backdrop", "Resize": "Change dimensions", "Split": "One PDF per page",
+    "Remove BG": "Transparent cut-out", "Add BG": "Gradient backdrop", "Resize": "Change dimensions",
+    "Split": "One PDF per page",
     "Rotate": "Turn pages 90°", "Merge": "Join into one PDF", "Protect": "Add a password",
     "Extract": "Save embedded images",
 }
@@ -45,7 +46,7 @@ FORMAT_HINTS = {"JPG": "Small, universal", "PNG": "Lossless · transparency", "W
                 "BMP": "Uncompressed", "PDF": "Document", "ICO": "Windows icon", "GIF": "Legacy web",
                 "DOCX": "Editable Word", "TXT": "Plain text"}
 
-IMAGE_TOOLS = ["Compress", "Resize", "Crop", "Edit", "Annotate", "Redact", "Add BG", "Metadata"]
+IMAGE_TOOLS = ["Compress", "Resize", "Crop", "Edit", "Annotate", "Redact", "Remove BG", "Add BG", "Metadata"]
 PDF_TOOLS = ["Compress", "Split", "Rotate", "Protect", "Extract", "Metadata"]
 
 
@@ -282,7 +283,8 @@ class DragShiftApp(QObject):
                             {"Compress": "Compressing…", "Split": "Splitting…", "Rotate": "Rotating…",
                              "Extract": "Extracting images…"}[name])
             return
-        windows = {"Crop": tools.CropWindow, "Add BG": tools.AddBgWindow, "Annotate": tools.AnnotateWindow,
+        windows = {"Crop": tools.CropWindow, "Remove BG": tools.RemoveBgWindow, "Add BG": tools.AddBgWindow,
+                   "Annotate": tools.AnnotateWindow,
                    "Redact": tools.RedactWindow, "Edit": tools.EditWindow, "Metadata": tools.MetadataWindow}
         try:
             if name == "Compress":
@@ -511,6 +513,8 @@ def selftest() -> int:
             docx = convert.convert(Path(d) / "n.txt", "text", "DOCX")[0]
             convert.convert(docx, "docx", "TXT")
             imaging.add_background(convert.open_image(src), imaging.Background())
+            from . import cutout
+            cutout.remove_background(convert.open_image(src), cutout.Cutout(seeds=[(0.5, 0.5)]))
             imaging.compress_pdf(pdf)
             imaging.protect_pdf(pdf, "pw")
             from . import liquid
@@ -518,7 +522,8 @@ def selftest() -> int:
             menu = RadialMenu(lambda p: {"Convert": [Item("PNG")]}, lambda p: "1 KB")
             menu._load([str(src)])
             n = lambda *a, **k: None
-            for w in (tools.CropWindow(str(src), n), tools.AddBgWindow(str(src), n), tools.EditWindow(str(src), n),
+            for w in (tools.CropWindow(str(src), n), tools.AddBgWindow(str(src), n), tools.RemoveBgWindow(str(src), n),
+                      tools.EditWindow(str(src), n),
                       tools.AnnotateWindow(str(src), n), tools.RedactWindow(str(src), n),
                       tools.MetadataWindow(str(src), n), tools.CompressWindow([str(src)], n),
                       tools.ResizeWindow([str(src)], n), tools.ProtectWindow(str(pdf), n)):

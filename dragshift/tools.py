@@ -1,9 +1,10 @@
-"""Tool windows: Compress, Resize, Crop, Edit, Annotate, Redact, Add BG, Metadata, Protect.
+"""Tool windows: Compress, Resize, Crop, Edit, Annotate, Redact, Remove BG, Add BG, Metadata, Protect.
 
 Every window opens on a fast, reduced-size preview. Saving runs on the full-resolution
 image in the background (the window closes immediately; a notification reports the result)."""
 from __future__ import annotations
 
+import copy
 import io
 import math
 from pathlib import Path
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QColorDialog, QComboBox,
                                QPushButton, QSlider, QSpinBox, QTableWidget, QTableWidgetItem,
                                QVBoxLayout, QWidget)
 
-from . import imaging
+from . import cutout, imaging
 from .util import ui_family
 from .convert import open_image, open_preview
 from .glass import pil_from_qimage, qimage_from_pil
@@ -561,6 +562,264 @@ class AddBgWindow(ToolWindow):
             save_image(out_im, out, "PNG")
             return [out]
         self.run(work, "Adding background…")
+
+
+# ================================================================ REMOVE BG
+class CutoutView(ImageView):
+    """Preview of the cut-out. Click to mark background, or paint Erase / Keep strokes."""
+
+    COLORS = {"erase": QColor(255, 95, 109, 120), "keep": QColor(80, 220, 140, 120)}
+
+    def __init__(self, image: QImage, owner: "RemoveBgWindow"):
+        super().__init__(image)
+        self.owner = owner
+        self.cur: cutout.Stroke | None = None
+        self.hover: QPointF | None = None
+        self.setCursor(Qt.CrossCursor)
+
+    def _norm(self, pos: QPointF) -> tuple[float, float]:
+        p = self.clamp_image(self.to_image(pos))
+        return p.x() / max(1, self.image.width()), p.y() / max(1, self.image.height())
+
+    def _brush_px(self) -> float:
+        return self.owner.brush_radius() * max(self.image.width(), self.image.height()) * self.scale()
+
+    def mousePressEvent(self, e):
+        if e.button() != Qt.LeftButton or not self.target_rect().contains(e.position()):
+            return
+        mode = self.owner.mode()
+        if mode == "pick":
+            self.owner.add_seed(self._norm(e.position()))
+        else:
+            self.cur = cutout.Stroke(mode, self.owner.brush_radius(), [self._norm(e.position())])
+            self.update()
+
+    def mouseMoveEvent(self, e):
+        self.hover = e.position()
+        if self.cur is not None:
+            pt = self._norm(e.position())
+            last = self.cur.points[-1]
+            if math.hypot((pt[0] - last[0]) * self.image.width(), (pt[1] - last[1]) * self.image.height()) >= 1.5:
+                self.cur.points.append(pt)
+        self.update()
+
+    def mouseReleaseEvent(self, e):
+        if self.cur is not None:
+            st, self.cur = self.cur, None
+            self.owner.add_stroke(st)
+        self.update()
+
+    def leaveEvent(self, e):
+        self.hover = None
+        self.update()
+
+    def paint_overlay(self, p: QPainter, t: QRectF):
+        w, h = self.image.width(), self.image.height()
+        to_w = lambda q: self.to_widget(QPointF(q[0] * w, q[1] * h))
+        if self.owner.comparing:
+            return
+        # clicked background points
+        for q in self.owner.params.seeds:
+            c = to_w(q)
+            p.setPen(QPen(QColor(0, 0, 0, 160), 3))
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(c, 6, 6)
+            p.setPen(QPen(QColor(255, 255, 255), 1.6))
+            p.drawEllipse(c, 6, 6)
+        # stroke being painted
+        if self.cur is not None and self.cur.points:
+            col = self.COLORS[self.cur.mode]
+            pen = QPen(col, max(1.0, 2 * self._brush_px()), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            p.setPen(pen)
+            if len(self.cur.points) == 1:
+                p.drawPoint(to_w(self.cur.points[0]))
+            else:
+                p.drawPolyline(QPolygonF([to_w(q) for q in self.cur.points]))
+        # brush outline
+        if self.hover is not None and self.owner.mode() != "pick" and t.contains(self.hover):
+            r = self._brush_px()
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(QColor(0, 0, 0, 150), 2.5))
+            p.drawEllipse(self.hover, r, r)
+            p.setPen(QPen(QColor(255, 255, 255, 230), 1.2))
+            p.drawEllipse(self.hover, r, r)
+
+
+class RemoveBgWindow(ToolWindow):
+    tool_name = "Remove BG"
+    MODES = [("Pick background", "pick"), ("Erase", "erase"), ("Keep", "keep")]
+    BACKDROPS = [("Checker", "checker"), ("White", "white"), ("Dark", "dark")]
+    HINT = ("Background found automatically. Missed a spot? Click it with Pick background. "
+            "Touch up with the Erase and Keep brushes.")
+    HINT_UNSURE = ("Couldn't find a clear background. Click on the background with Pick background, "
+                   "lower Tolerance, or paint with Erase and Keep.")
+
+    def __init__(self, path, notify):
+        super().__init__("Remove BG", path, notify, size=(900, 840))
+        self.small = open_preview(path, 760)
+        with Image.open(path) as im:
+            self.full_size = im.size if im.getexif().get(0x0112, 1) not in (5, 6, 7, 8) else im.size[::-1]
+        self.params = cutout.Cutout()
+        self.history: list[str] = []      # "seed" / "stroke", for Undo
+        self.comparing = False
+        self._cut: Image.Image | None = None
+
+        self.view = CutoutView(qimage_from_pil(self.small), self)
+        self.body.addWidget(self.view, 1)
+        self.hint = QLabel(self.HINT)
+        self.hint.setObjectName("dim")
+        self.hint.setWordWrap(True)
+        self.body.addWidget(self.hint)
+
+        row, self.mode_grp = toggle_row([n for n, _ in self.MODES])
+        undo = QPushButton("Undo")
+        undo.setToolTip("Undo the last click or stroke (Ctrl+Z)")
+        undo.clicked.connect(self.undo)
+        QShortcut(QKeySequence.Undo, self, activated=self.undo)
+        row.addWidget(undo)
+        cmp_btn = QPushButton("Hold to compare")
+        cmp_btn.pressed.connect(lambda: self._compare(True))
+        cmp_btn.released.connect(lambda: self._compare(False))
+        row.addWidget(cmp_btn)
+        self.mode_grp.idClicked.connect(lambda _: self.view.update())
+        self.body.addLayout(row)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        self.tol = slider(0, 100, self.params.tolerance)
+        self.soft = slider(0, 100, self.params.softness)
+        self.brush = slider(1, 40, 10)
+        slider_row(grid, 0, "Tolerance", self.tol, lambda v: f"{v}")
+        slider_row(grid, 1, "Edge softness", self.soft, lambda v: f"{v}")
+        slider_row(grid, 2, "Brush size", self.brush, lambda v: f"{v}")
+        self.body.addLayout(grid)
+        self.tol.setToolTip("Higher removes colours further from the background")
+        self.brush.valueChanged.connect(lambda _: self.view.update())
+
+        opts = QHBoxLayout()
+        self.holes = QCheckBox("Remove enclosed areas")
+        self.holes.setToolTip("Also clear background-coloured gaps inside the subject (a cup handle, the inside of an O)")
+        self.specks = QCheckBox("Clean up specks")
+        self.specks.setChecked(True)
+        self.trim = QCheckBox("Trim to subject")
+        self.trim.setToolTip("Crop the saved PNG to the subject")
+        for cb in (self.holes, self.specks, self.trim):
+            opts.addWidget(cb)
+        opts.addStretch(1)
+        bd_row, self.bd_grp = toggle_row([n for n, _ in self.BACKDROPS])
+        self.bd_grp.idClicked.connect(lambda _: self.show_result())
+        opts.addLayout(bd_row)
+        self.body.addLayout(opts)
+
+        self.out_label = QLabel()
+        self.out_label.setObjectName("dim")
+        self.out_label.setAlignment(Qt.AlignCenter)
+        self.body.addWidget(self.out_label)
+
+        self.copy_btn = QPushButton("Copy")
+        self.copy_btn.setToolTip("Copy the cut-out to the clipboard")
+        self.copy_btn.clicked.connect(self.copy)
+        self.body.addLayout(self.footer("Remove Background", self.save, self.reset, [self.copy_btn]))
+
+        self._timer = QTimer(self, singleShot=True, interval=60, timeout=self.render)
+        for s in (self.tol, self.soft):
+            s.valueChanged.connect(lambda _: self._timer.start())
+        for cb in (self.holes, self.specks):
+            cb.toggled.connect(lambda _: self._timer.start())
+        self.trim.toggled.connect(lambda _: self._update_label())
+        self.render()
+
+    # ---- state
+    def mode(self) -> str:
+        return self.MODES[max(0, self.mode_grp.checkedId())][1]
+
+    def brush_radius(self) -> float:
+        return self.brush.value() / 400          # fraction of the longer side
+
+    def add_seed(self, pt: tuple[float, float]):
+        self.params.seeds.append(pt)
+        self.history.append("seed")
+        self.render()
+
+    def add_stroke(self, st: cutout.Stroke):
+        self.params.strokes.append(st)
+        self.history.append("stroke")
+        self.render()
+
+    def undo(self):
+        if not self.history:
+            return
+        kind = self.history.pop()
+        (self.params.seeds if kind == "seed" else self.params.strokes).pop()
+        self.render()
+
+    def _collect(self) -> cutout.Cutout:
+        p = self.params
+        p.tolerance, p.softness = self.tol.value(), self.soft.value()
+        p.holes, p.specks, p.trim = self.holes.isChecked(), self.specks.isChecked(), self.trim.isChecked()
+        return p
+
+    def _compare(self, on: bool):
+        self.comparing = on
+        self.show_result()
+
+    # ---- preview
+    def render(self):
+        p = copy.deepcopy(self._collect())
+        p.trim = False   # the preview keeps the full frame so clicks and strokes line up
+        self._cut = cutout.remove_background(self.small, p, cutout.PREVIEW_WORK_SIDE)
+        share = cutout.removed_share(self._cut)
+        unsure = (share > 0.97 or share < 0.02) and not self.params.seeds and not self.params.strokes
+        self.hint.setText(self.HINT_UNSURE if unsure else self.HINT)
+        self.show_result()
+        self._update_label(share)
+
+    def show_result(self):
+        if self._cut is None:
+            return
+        if self.comparing:
+            shown = self.small
+        else:
+            shown = cutout.on_backdrop(self._cut, self.BACKDROPS[max(0, self.bd_grp.checkedId())][1])
+        self.view.set_image(qimage_from_pil(shown))
+
+    def _update_label(self, share: float | None = None):
+        if share is None:
+            share = cutout.removed_share(self._cut) if self._cut is not None else 0.0
+        w, h = self.full_size
+        size = "trimmed to the subject" if self.trim.isChecked() else f"{dims_text(w, h)} px"
+        self.out_label.setText(f"Output  {size}  ·  transparent PNG  ·  {share * 100:.0f}% removed")
+
+    def reset(self):
+        self.params = cutout.Cutout()
+        self.history.clear()
+        self.tol.setValue(self.params.tolerance)
+        self.soft.setValue(self.params.softness)
+        self.holes.setChecked(False)
+        self.specks.setChecked(True)
+        self.trim.setChecked(False)
+        self.mode_grp.button(0).setChecked(True)
+        self.render()
+
+    # ---- output
+    def copy(self):
+        out = cutout.remove_background(open_image(self.path), copy.deepcopy(self._collect()))
+        QGuiApplication.clipboard().setImage(qimage_from_pil(out))
+        self.copy_btn.setText("Copied ✓")
+        QTimer.singleShot(1400, lambda: self.copy_btn.setText("Copy"))
+
+    def save(self):
+        params, path = copy.deepcopy(self._collect()), self.path
+        edits = len(params.seeds) + len(params.strokes)
+        extra = f"{edits} touch-up{'s' if edits != 1 else ''}" if edits else ""
+
+        def work():
+            out_im = cutout.remove_background(open_image(path), params)
+            out = sibling(path, "No Background", ".png")
+            from .convert import save_image
+            save_image(out_im, out, "PNG")
+            return [out]
+        self.run(work, "Removing background…", extra)
 
 
 # ================================================================ ANNOTATE
