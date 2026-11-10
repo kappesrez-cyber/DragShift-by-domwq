@@ -157,7 +157,9 @@ def test_remove_bg_window(qapp, tmp_path):
     done = []
     w = tools.RemoveBgWindow(str(src), lambda *a, **k: done.append(a))
     assert w._cut is not None and cutout.removed_share(w._cut) > 0.5
-    w.add_seed((0.6, 0.5))
+    w.add_seed((590 / 900, 360 / 700))          # click the hole in the mug's handle
+    a = np.asarray(w._cut.split()[3])
+    assert a[360, 590] == 0 and a[350, 440] == 255
     w.add_stroke(cutout.Stroke("erase", 0.02, [(0.1, 0.1), (0.2, 0.2)]))
     assert w.history == ["seed", "stroke"]
     w.undo()
