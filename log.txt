@@ -1,0 +1,21 @@
+[   0.00] display :99 screen (1280, 800) cmd ['dragshift']
+[  16.27] PASS JPG → PNG                        9.6s  D-Photo.png · 2400×1600
+[  25.81] PASS JPG → WEBP                       8.9s  D-Photo.webp · 2400×1600
+[  36.19] PASS JPG → HEIC                       9.8s  D-Photo.heic · 2400×1600
+[  45.46] PASS JPG → PDF                        8.7s  D-Photo.pdf · 1 page(s)
+[  54.73] PASS PNG → JPG                        8.7s  D-Graphic.jpg · 800×533
+[  65.10] PASS PDF → JPG (3 pages)              9.8s  3 × .jpg
+[  74.34] PASS PDF → TXT                        8.6s  D-Report.txt
+[  83.59] PASS DOCX → PDF                       8.6s  D-Letter.pdf · 1 page(s)
+[  92.85] PASS TXT → PDF                        8.7s  D-Notes.pdf · 1 page(s)
+[ 102.97] PASS PDF Split                        9.5s  3 PDFs
+[ 113.08] PASS PDF Rotate                       9.5s  all pages at 90°
+[ 123.46] PASS PDF Compress                     9.8s  227 KB → 108 KB
+[ 134.59] PASS Merge 2 PDFs                    10.5s  5 pages
+[ 147.56] PASS Compress (window, Enter)        12.4s  354 KB → 112 KB · 69% smaller
+[ 160.51] PASS Resize 50% (window, Enter)      12.4s  2400×1600 → 1200×800
+[ 174.50] PASS Add BG (window, Enter)          13.4s  800×533 → 992×725
+[ 187.46] PASS Metadata: remove all (Enter)    12.4s  0 metadata fields left
+[ 201.42] PASS PDF Protect (password)          13.4s  AES-256, password works
+[ 210.11] PASS Open With → AVIF (click)         8.1s  D-Photo.avif · 2400×1600
+[ 210.22] DONE 19/19
