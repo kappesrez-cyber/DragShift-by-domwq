@@ -15,6 +15,10 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # SignPath test signing needs this repository's own SignPath token. Forks and
+      # copies without it skip signing and still build, test and publish.
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +100,7 @@ jobs:
       # again so the release keeps publishing exactly what it published before.
       - name: Upload unsigned artifact for SignPath
         id: upload-unsigned-artifact
+        if: env.SIGNPATH_ENABLED == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: unsigned
@@ -104,6 +109,7 @@ jobs:
             dist/DragShift-Setup.exe
 
       - name: Submit test signing request to SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
@@ -341,7 +347,7 @@ jobs:
             - **DragShift.exe** — portable.
 
             **Mac** (macOS 11+). Easiest, with no security warning, is to paste into Terminal:
-            `curl -fsSL https://raw.githubusercontent.com/llamaboi55/DragShift/main/install-mac.sh | bash`
+            `curl -fsSL https://raw.githubusercontent.com/kappesrez-cyber/DragShift-by-domwq/main/install-mac.sh | bash`
 
             Or download:
             - **DragShift-mac-apple-silicon.dmg** — M1/M2/M3/M4 Macs.

